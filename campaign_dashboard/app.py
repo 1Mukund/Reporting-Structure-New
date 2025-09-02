@@ -44,30 +44,43 @@ def prepare_summary(churn_df, cs_df):
     churn_df.columns = churn_df.columns.str.strip()
     cs_df.columns = cs_df.columns.str.strip()
 
-    # Fix merge key mismatch
+    # Rename for consistent merge key
     if "Campaign ID" in churn_df.columns:
         churn_df.rename(columns={"Campaign ID": "Camp_ID"}, inplace=True)
 
     if "Project" in churn_df.columns and "Project Name" not in churn_df.columns:
         churn_df.rename(columns={"Project": "Project Name"}, inplace=True)
 
+    # Ensure merge columns exist
+    if "Camp_ID" not in churn_df.columns or "Camp_ID" not in cs_df.columns:
+        st.error("❌ 'Camp_ID' column missing in one of the sheets.")
+        st.write("Churn columns:", list(churn_df.columns))
+        st.write("CS columns:", list(cs_df.columns))
+        st.stop()
+
     df = churn_df.merge(cs_df, on="Camp_ID", how="left")
 
-    # Handle date column with fallback
+    # Handle date column
     date_col = "Date"
     if "Date" not in df.columns:
         possible_dates = [col for col in df.columns if "Date" in col]
         if possible_dates:
-            date_col = possible_dates[0]
-            df.rename(columns={date_col: "Date"}, inplace=True)
+            df.rename(columns={possible_dates[0]: "Date"}, inplace=True)
         else:
-            st.error("❌ 'Date' column not found after cleaning.")
-            st.write("Merged Data Columns", list(df.columns))
+            st.error("❌ 'Date' column not found after merge.")
+            st.write("Merged Columns:", list(df.columns))
             st.stop()
 
     df['Date'] = pd.to_datetime(df['Date'], errors="coerce")
 
+    # Required groupby columns
     group_cols = ["Date", "Camp_ID", "Project Name", "Audience_ID", "Objectives"]
+    missing = [col for col in group_cols if col not in df.columns]
+    if missing:
+        st.error(f"❌ Missing columns for summary: {missing}")
+        st.write("Available columns:", list(df.columns))
+        st.stop()
+
     agg_dict = {
         "Sent": "sum",
         "Delivered": "sum",
@@ -93,15 +106,13 @@ with st.spinner("Loading data..."):
 # --- Sidebar Filters ---
 st.sidebar.header("🔍 Filters")
 
-# New: Optional Date Range
+# Optional Date Range Filter
 use_date_filter = st.sidebar.checkbox("Enable Date Range Filter")
 if use_date_filter:
-    date_range = st.sidebar.date_input(
-        "Select Date Range", value=(datetime.today(), datetime.today()))
+    date_range = st.sidebar.date_input("Select Date Range", value=(datetime.today(), datetime.today()))
 else:
     date_range = None
 
-# Filter base dataframe
 filtered_df = summary_df.copy()
 
 # Apply date range filter
@@ -112,7 +123,7 @@ if date_range and len(date_range) == 2:
         (filtered_df['Date'].dt.date <= end_date)
     ]
 
-# Dynamic Campaign and Project options post date-filter
+# Campaign/Project Filters after date
 campaign_filter = st.sidebar.multiselect("Campaign ID", options=filtered_df["Camp_ID"].unique())
 project_filter = st.sidebar.multiselect("Project Name", options=filtered_df["Project Name"].unique())
 

@@ -1,3 +1,11 @@
+# --- Early Ping Detection to Keep App Awake ---
+import streamlit as st
+
+if st.query_params.get("ping") == "true":
+    st.write("✅ Ping received. App is awake.")
+    st.stop()
+
+
 import streamlit as st
 import pandas as pd
 import gspread

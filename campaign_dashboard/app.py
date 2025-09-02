@@ -45,6 +45,10 @@ def fetch_data():
 
 # --- Preprocessing & Summary ---
 def prepare_summary(churn_df, cs_df):
+    # Clean column names
+    churn_df.columns = churn_df.columns.str.strip()
+    cs_df.columns = cs_df.columns.str.strip()
+
     # Rename for consistency
     if "Campaign ID" in churn_df.columns:
         churn_df.rename(columns={"Campaign ID": "Camp_ID"}, inplace=True)
@@ -54,14 +58,20 @@ def prepare_summary(churn_df, cs_df):
     # Merge data
     df = churn_df.merge(cs_df, on="Camp_ID", how="left")
 
-    # Handle 'Date' column with robustness
-    date_col = [col for col in df.columns if col.strip().lower() == 'date']
-    if date_col:
-        df[date_col[0]] = pd.to_datetime(df[date_col[0]], errors="coerce")
-        df.rename(columns={date_col[0]: 'Date'}, inplace=True)
-    else:
+    # 🔍 Print columns for debug
+    st.subheader("📋 Merged Data Columns")
+    st.write(df.columns.tolist())
+
+    # 🧠 Try to detect the correct Date column
+    date_col_candidates = [col for col in df.columns if col.strip().lower() == 'date']
+
+    if not date_col_candidates:
         st.error("❌ 'Date' column not found after cleaning.")
         st.stop()
+
+    # Use first matching column and standardize
+    df[date_col_candidates[0]] = pd.to_datetime(df[date_col_candidates[0]], errors="coerce")
+    df.rename(columns={date_col_candidates[0]: "Date"}, inplace=True)
 
     # Group and summarize
     group_cols = ["Date", "Camp_ID", "Project Name", "Audience_ID", "Objectives"]

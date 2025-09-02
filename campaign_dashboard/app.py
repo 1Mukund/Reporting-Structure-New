@@ -29,7 +29,10 @@ def fetch_data():
         cs_df = pd.DataFrame(sheet.worksheet("CS").get_all_records())
         node_def = pd.DataFrame(sheet.worksheet("Node_def").get_all_records())
         cta_def = pd.DataFrame(sheet.worksheet("CTA_Def").get_all_records())
-        return churn_df, cs_df, node_def, cta_def
+        base_def = pd.DataFrame(sheet.worksheet("Base_Def").get_all_records())
+        source_def = pd.DataFrame(sheet.worksheet("Source_Def").get_all_records())
+        audience_def = pd.DataFrame(sheet.worksheet("Audience_Definition").get_all_records())
+        return churn_df, cs_df, node_def, cta_def, base_def, source_def, audience_def
     except Exception as e:
         st.error(f"❌ Failed to load data:\n\n{e}")
         st.stop()
@@ -86,22 +89,33 @@ def prepare_summary(churn_df, cs_df):
 
 # --- Load ---
 with st.spinner("🔄 Loading data..."):
-    churn_df, cs_df, node_def, cta_def = fetch_data()
+    churn_df, cs_df, node_def, cta_def, base_def, source_def, audience_def = fetch_data()
     summary_df = prepare_summary(churn_df, cs_df)
 
 # --- Sidebar Filters ---
 st.sidebar.header("🔍 Filters")
 
-# --- Optional Date Range Filter ---
+# --- Date Range ---
 enable_date_filter = st.sidebar.checkbox("Enable Date Range Filter")
-
 start_date, end_date = None, None
 if enable_date_filter:
     date_range = st.sidebar.date_input("Select Date Range", value=(datetime.today(), datetime.today()))
     if isinstance(date_range, tuple) and len(date_range) == 2:
         start_date, end_date = date_range
 
-# --- Filter Dataset ---
+# --- Campaign / Project Filter ---
+campaign_filter = st.sidebar.multiselect("Campaign ID", options=summary_df["Camp_ID"].unique())
+project_filter = st.sidebar.multiselect("Project Name", options=summary_df["Project Name"].unique())
+
+# --- Raw Sheet Viewer ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("🧾 Raw Sheet Viewer")
+raw_sheet = st.sidebar.selectbox(
+    "Select Raw Sheet to View",
+    ["None", "Daily report - Churn", "Node Def", "CTA Def", "Base Def", "Source Def", "Audience Definition"]
+)
+
+# --- Filtered Dataset ---
 filtered_df = summary_df.copy()
 
 if start_date and end_date:
@@ -110,15 +124,12 @@ if start_date and end_date:
         (filtered_df["Date"].dt.date <= end_date)
     ]
 
-campaign_filter = st.sidebar.multiselect("Campaign ID", options=filtered_df["Camp_ID"].unique())
-project_filter = st.sidebar.multiselect("Project Name", options=filtered_df["Project Name"].unique())
-
 if campaign_filter:
     filtered_df = filtered_df[filtered_df["Camp_ID"].isin(campaign_filter)]
 if project_filter:
     filtered_df = filtered_df[filtered_df["Project Name"].isin(project_filter)]
 
-# --- Output Table ---
+# --- Output Summary ---
 st.subheader("📋 Filtered Campaign Summary")
 st.dataframe(filtered_df, use_container_width=True)
 
@@ -129,3 +140,19 @@ if not filtered_df.empty:
     st.bar_chart(filtered_df.set_index("Camp_ID")[kpi_cols])
 else:
     st.info("No data matches the filters selected.")
+
+# --- Show Raw Sheet Based on Sidebar Selection ---
+if raw_sheet != "None":
+    st.subheader(f"🗂️ Raw Data: {raw_sheet}")
+    if raw_sheet == "Daily report - Churn":
+        st.dataframe(churn_df, use_container_width=True)
+    elif raw_sheet == "Node Def":
+        st.dataframe(node_def, use_container_width=True)
+    elif raw_sheet == "CTA Def":
+        st.dataframe(cta_def, use_container_width=True)
+    elif raw_sheet == "Base Def":
+        st.dataframe(base_def, use_container_width=True)
+    elif raw_sheet == "Source Def":
+        st.dataframe(source_def, use_container_width=True)
+    elif raw_sheet == "Audience Definition":
+        st.dataframe(audience_def, use_container_width=True)

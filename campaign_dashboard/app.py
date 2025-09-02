@@ -129,14 +129,19 @@ if project_filter:
     filtered_df = filtered_df[filtered_df["Project Name"].isin(project_filter)]
 
 # --- Sheet Viewer Dropdown ---
+# --- Sheet Viewer Toggle ---
 st.sidebar.markdown("---")
-sheet_to_view = st.sidebar.selectbox(
-    "👁 View Raw Sheet",
-    options=["None", "Daily report - Churn", "Node_def", "CTA_Def", "Base_Definitions", "Source_Def", "Audience_definition"],
-)
+enable_sheet_view = st.sidebar.checkbox("📂 Enable Raw Sheet Viewer")
+
+sheet_to_view = "None"
+if enable_sheet_view:
+    sheet_to_view = st.sidebar.selectbox(
+        "Select Raw Sheet to View",
+        options=["None", "Daily report - Churn", "Node_def", "CTA_Def", "Base_Definitions", "Source_Def", "Audience_definition"],
+    )
 
 # --- Main View ---
-if sheet_to_view != "None":
+if enable_sheet_view and sheet_to_view != "None":
     st.subheader(f"📄 Raw Sheet: {sheet_to_view}")
     df_map = {
         "Daily report - Churn": churn_df,

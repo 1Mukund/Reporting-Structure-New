@@ -37,6 +37,21 @@ def fetch_data():
 
 # --- Process Data ---
 def prepare_summary(churn_df, cs_df):
+    # Strip column spaces
+    churn_df.columns = churn_df.columns.str.strip()
+    cs_df.columns = cs_df.columns.str.strip()
+
+    # Rename if required
+    if "Camp ID" in churn_df.columns:
+        churn_df.rename(columns={"Camp ID": "Camp_ID"}, inplace=True)
+    if "Camp ID" in cs_df.columns:
+        cs_df.rename(columns={"Camp ID": "Camp_ID"}, inplace=True)
+
+    # Debug output
+    st.write("Churn DF columns:", churn_df.columns.tolist())
+    st.write("CS DF columns:", cs_df.columns.tolist())
+
+    # Merge and compute summary
     df = churn_df.merge(cs_df, on="Camp_ID", how="left")
     df['Date'] = pd.to_datetime(df['Date'])
     summary = df.groupby(["Date", "Camp_ID", "Project Name", "Audience_ID", "Objectives"]).agg({
@@ -49,6 +64,7 @@ def prepare_summary(churn_df, cs_df):
     summary["Reply %"] = (summary["Replied"] / summary["Sent"] * 100).round(2)
     summary["Delivery %"] = (summary["Delivered"] / summary["Sent"] * 100).round(2)
     return summary
+
 
 # --- Streamlit UI ---
 st.set_page_config(page_title="Campaign LMS Dashboard", layout="wide")

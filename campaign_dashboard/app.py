@@ -34,6 +34,10 @@ def fetch_data():
         node_def = pd.DataFrame(sheet.worksheet("Node_def").get_all_records())
         cta_def = pd.DataFrame(sheet.worksheet("CTA_Def").get_all_records())
 
+        # Strip column names
+        churn_df.columns = churn_df.columns.str.strip()
+        cs_df.columns = cs_df.columns.str.strip()
+
         return churn_df, cs_df, node_def, cta_def
     except Exception as e:
         st.error(f"❌ Failed to load data:\n\n{e}")
@@ -41,30 +45,37 @@ def fetch_data():
 
 # --- Preprocessing & Summary ---
 def prepare_summary(churn_df, cs_df):
-    churn_df.columns = churn_df.columns.str.strip()
-    cs_df.columns = cs_df.columns.str.strip()
-
-    # Fix merge key mismatch
+    # Rename for consistency
     if "Campaign ID" in churn_df.columns:
         churn_df.rename(columns={"Campaign ID": "Camp_ID"}, inplace=True)
-
-    # Optional column fixes
     if "Project" in churn_df.columns and "Project Name" not in churn_df.columns:
         churn_df.rename(columns={"Project": "Project Name"}, inplace=True)
 
+    # Merge data
     df = churn_df.merge(cs_df, on="Camp_ID", how="left")
-    df['Date'] = pd.to_datetime(df['Date'], errors="coerce")
 
-    summary = df.groupby(["Date", "Camp_ID", "Project Name", "Audience_ID", "Objectives"]).agg({
+    # Handle 'Date' column with robustness
+    date_col = [col for col in df.columns if col.strip().lower() == 'date']
+    if date_col:
+        df[date_col[0]] = pd.to_datetime(df[date_col[0]], errors="coerce")
+        df.rename(columns={date_col[0]: 'Date'}, inplace=True)
+    else:
+        st.error("❌ 'Date' column not found after cleaning.")
+        st.stop()
+
+    # Group and summarize
+    group_cols = ["Date", "Camp_ID", "Project Name", "Audience_ID", "Objectives"]
+    agg_dict = {
         "Sent": "sum",
         "Delivered": "sum",
         "Read": "sum",
         "Lead Count": "sum"
-    }).reset_index()
+    }
 
-    # Optional: Add Replied if available
+    summary = df.groupby(group_cols).agg(agg_dict).reset_index()
+
     if "Replied" in df.columns:
-        summary["Replied"] = df.groupby(["Date", "Camp_ID", "Project Name", "Audience_ID", "Objectives"])["Replied"].sum().values
+        summary["Replied"] = df.groupby(group_cols)["Replied"].sum().values
         summary["Reply %"] = (summary["Replied"] / summary["Sent"] * 100).round(2)
 
     summary["Delivery %"] = (summary["Delivered"] / summary["Sent"] * 100).round(2)
@@ -95,7 +106,11 @@ st.subheader("📋 Filtered Campaign Summary")
 st.dataframe(filtered_df, use_container_width=True)
 
 st.subheader("📈 KPIs")
-kpi_chart = filtered_df.set_index("Camp_ID")[["Reply %", "Delivery %"]] if "Reply %" in filtered_df else filtered_df.set_index("Camp_ID")[["Delivery %"]]
+if "Reply %" in filtered_df:
+    kpi_chart = filtered_df.set_index("Camp_ID")[["Reply %", "Delivery %"]]
+else:
+    kpi_chart = filtered_df.set_index("Camp_ID")[["Delivery %"]]
+
 if not kpi_chart.empty:
     st.bar_chart(kpi_chart)
 else:

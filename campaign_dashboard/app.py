@@ -41,29 +41,30 @@ def prepare_summary(churn_df, cs_df):
     churn_df.columns = churn_df.columns.str.strip()
     cs_df.columns = cs_df.columns.str.strip()
 
-    # Rename if required
-    if "Camp ID" in churn_df.columns:
-        churn_df.rename(columns={"Camp ID": "Camp_ID"}, inplace=True)
-    if "Camp ID" in cs_df.columns:
-        cs_df.rename(columns={"Camp ID": "Camp_ID"}, inplace=True)
+    # Rename mismatched columns
+    if "Campaign ID" in churn_df.columns:
+        churn_df.rename(columns={"Campaign ID": "Camp_ID"}, inplace=True)
 
-    # Debug output
+    # Debug outputs
     st.write("Churn DF columns:", churn_df.columns.tolist())
     st.write("CS DF columns:", cs_df.columns.tolist())
 
     # Merge and compute summary
     df = churn_df.merge(cs_df, on="Camp_ID", how="left")
     df['Date'] = pd.to_datetime(df['Date'])
+
     summary = df.groupby(["Date", "Camp_ID", "Project Name", "Audience_ID", "Objectives"]).agg({
         "Sent": "sum",
         "Delivered": "sum",
         "Read": "sum",
-        "Replied": "sum",
+        "Replied": "sum" if "Replied" in df.columns else "Read",  # fallback
         "Lead Count": "sum"
     }).reset_index()
+
     summary["Reply %"] = (summary["Replied"] / summary["Sent"] * 100).round(2)
     summary["Delivery %"] = (summary["Delivered"] / summary["Sent"] * 100).round(2)
     return summary
+
 
 
 # --- Streamlit UI ---

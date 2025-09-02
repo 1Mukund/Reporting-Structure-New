@@ -5,7 +5,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from urllib.parse import urlparse
 
 # Get sheet URL from user or use default
-sheet_url = "https://docs.google.com/spreadsheets/d/1rl0AdLpgsYtzIfTWrdPmdiG1biQlstvXAqKP_qbPojY/edit"
+sheet_url = "https://docs.google.com/spreadsheets/d/1HqdMofrH250DFnbuVKMxboJc0w0AlaVAF1aFYBNCYQQ/edit?usp=sharing"
 
 @st.cache_resource
 def load_sheet(sheet_url):

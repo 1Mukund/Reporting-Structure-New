@@ -3,6 +3,8 @@
 import pandas as pd
 import streamlit as st
 import gspread
+import json
+import base64
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
@@ -11,7 +13,12 @@ from datetime import datetime
 def load_sheet(sheet_url):
     scope = ['https://spreadsheets.google.com/feeds',
              'https://www.googleapis.com/auth/drive']
-    creds = ServiceAccountCredentials.from_json_keyfile_name('gcreds.json', scope)
+
+    # Load key from secret instead of file
+    base64_key = st.secrets["GOOGLE_SERVICE_ACCOUNT"]
+    key_dict = json.loads(base64.b64decode(base64_key).decode("utf-8"))
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
+
     client = gspread.authorize(creds)
     sheet = client.open_by_url(sheet_url)
     return sheet

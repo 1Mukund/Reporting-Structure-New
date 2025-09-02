@@ -4,7 +4,6 @@ import pandas as pd
 import streamlit as st
 import gspread
 import json
-import base64
 import re
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
@@ -15,14 +14,13 @@ def load_sheet(sheet_url):
     scope = ['https://spreadsheets.google.com/feeds',
              'https://www.googleapis.com/auth/drive']
 
-    # Load key from secret instead of file
-    base64_key = st.secrets["GOOGLE_SERVICE_ACCOUNT"]
-    key_dict = json.loads(base64.b64decode(base64_key).decode("utf-8"))
+    # Load from [google_service_account] directly from secrets.toml
+    key_dict = dict(st.secrets["google_service_account"])
     creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
 
     client = gspread.authorize(creds)
 
-    # Extract sheet ID manually and load safely
+    # Extract Sheet ID from URL and load
     sheet_id = re.findall(r"/d/([a-zA-Z0-9-_]+)", sheet_url)[0]
     sheet = client.open_by_key(sheet_id)
     return sheet
@@ -39,7 +37,7 @@ def fetch_data():
 
 # --- Process Data ---
 def prepare_summary(churn_df, cs_df):
-    df = churn_df.merge(cs_df, left_on="Camp_ID", right_on="Camp_ID", how="left")
+    df = churn_df.merge(cs_df, on="Camp_ID", how="left")
     df['Date'] = pd.to_datetime(df['Date'])
     summary = df.groupby(["Date", "Camp_ID", "Project Name", "Audience_ID", "Objectives"]).agg({
         "Sent": "sum",
@@ -60,21 +58,29 @@ with st.spinner("Fetching and preparing data..."):
     churn_df, cs_df, node_def, cta_def = fetch_data()
     summary_df = prepare_summary(churn_df, cs_df)
 
-# --- Filters ---
+# --- Sidebar Filters ---
 st.sidebar.header("Filters")
-date_filter = st.sidebar.date_input("Date", value=datetime.today())
-campaign_filter = st.sidebar.multiselect("Campaign ID", options=summary_df["Camp_ID"].unique())
+date_filter = st.sidebar.date_input("Filter by Date", value=datetime.today())
+campaign_filter = st.sidebar.multiselect("Filter by Campaign ID", options=summary_df["Camp_ID"].unique())
+project_filter = st.sidebar.multiselect("Filter by Project", options=summary_df["Project Name"].unique())
 
+# --- Apply Filters ---
 filtered_df = summary_df.copy()
 if date_filter:
     filtered_df = filtered_df[filtered_df['Date'].dt.date == date_filter]
 if campaign_filter:
     filtered_df = filtered_df[filtered_df['Camp_ID'].isin(campaign_filter)]
+if project_filter:
+    filtered_df = filtered_df[filtered_df['Project Name'].isin(project_filter)]
 
-# --- Display ---
-st.subheader("📅 Summary Table")
-st.dataframe(filtered_df)
+# --- Display Output ---
+st.subheader("📅 Campaign Summary Table")
+st.dataframe(filtered_df, use_container_width=True)
 
 # --- KPI Charts ---
-st.subheader("📈 Reply & Delivery Rates")
-st.bar_chart(filtered_df.set_index("Camp_ID")[["Reply %", "Delivery %"]])
+st.subheader("📊 KPI Visualizations")
+kpi_chart = filtered_df.set_index("Camp_ID")[["Reply %", "Delivery %"]]
+if not kpi_chart.empty:
+    st.bar_chart(kpi_chart)
+else:
+    st.info("No data available for selected filters.")

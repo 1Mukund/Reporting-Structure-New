@@ -5,11 +5,11 @@ import re
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
-# --- Streamlit Page Config ---
+# --- Streamlit Config ---
 st.set_page_config(page_title="Campaign Dashboard", layout="wide")
 st.title("📊 Automated Campaign Dashboard")
 
-# --- Auth: Google Sheets ---
+# --- Google Sheet Auth ---
 @st.cache_resource
 def load_sheet(sheet_url):
     scope = ['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive']
@@ -20,7 +20,7 @@ def load_sheet(sheet_url):
     sheet_id = re.findall(r"/d/([a-zA-Z0-9-_]+)", sheet_url)[0]
     return client.open_by_key(sheet_id)
 
-# --- Fetch data from Google Sheets ---
+# --- Fetch Data ---
 @st.cache_data
 def fetch_data():
     try:
@@ -29,15 +29,26 @@ def fetch_data():
         cs_df = pd.DataFrame(sheet.worksheet("CS").get_all_records())
         node_def = pd.DataFrame(sheet.worksheet("Node_def").get_all_records())
         cta_def = pd.DataFrame(sheet.worksheet("CTA_Def").get_all_records())
-        base_def = pd.DataFrame(sheet.worksheet("Base_Def").get_all_records())
-        source_def = pd.DataFrame(sheet.worksheet("Source_Def").get_all_records())
-        audience_def = pd.DataFrame(sheet.worksheet("Audience_Definition").get_all_records())
+        
+        # Optional sheets with try/except
+        try:
+            base_def = pd.DataFrame(sheet.worksheet("Base_Definitions").get_all_records())
+        except: base_def = pd.DataFrame()
+
+        try:
+            source_def = pd.DataFrame(sheet.worksheet("Source_Def").get_all_records())
+        except: source_def = pd.DataFrame()
+
+        try:
+            audience_def = pd.DataFrame(sheet.worksheet("Audience_definition").get_all_records())
+        except: audience_def = pd.DataFrame()
+
         return churn_df, cs_df, node_def, cta_def, base_def, source_def, audience_def
     except Exception as e:
         st.error(f"❌ Failed to load data:\n\n{e}")
         st.stop()
 
-# --- Clean + Summarize Data ---
+# --- Summary Preparation ---
 def prepare_summary(churn_df, cs_df):
     churn_df.columns = churn_df.columns.str.strip()
     cs_df.columns = cs_df.columns.str.strip()
@@ -87,72 +98,66 @@ def prepare_summary(churn_df, cs_df):
 
     return summary
 
-# --- Load ---
+# --- Load Data ---
 with st.spinner("🔄 Loading data..."):
     churn_df, cs_df, node_def, cta_def, base_def, source_def, audience_def = fetch_data()
     summary_df = prepare_summary(churn_df, cs_df)
 
 # --- Sidebar Filters ---
 st.sidebar.header("🔍 Filters")
+use_date_range = st.sidebar.checkbox("Enable Date Range Filter", value=False)
 
-# --- Date Range ---
-enable_date_filter = st.sidebar.checkbox("Enable Date Range Filter")
-start_date, end_date = None, None
-if enable_date_filter:
-    date_range = st.sidebar.date_input("Select Date Range", value=(datetime.today(), datetime.today()))
-    if isinstance(date_range, tuple) and len(date_range) == 2:
-        start_date, end_date = date_range
+if use_date_range:
+    date_range = st.sidebar.date_input("Select Date Range", [])
+else:
+    date_range = []
 
-# --- Campaign / Project Filter ---
 campaign_filter = st.sidebar.multiselect("Campaign ID", options=summary_df["Camp_ID"].unique())
 project_filter = st.sidebar.multiselect("Project Name", options=summary_df["Project Name"].unique())
 
-# --- Raw Sheet Viewer ---
-st.sidebar.markdown("---")
-st.sidebar.subheader("🧾 Raw Sheet Viewer")
-raw_sheet = st.sidebar.selectbox(
-    "Select Raw Sheet to View",
-    ["None", "Daily report - Churn", "Node Def", "CTA Def", "Base Def", "Source Def", "Audience Definition"]
-)
-
-# --- Filtered Dataset ---
+# --- Apply Filters ---
 filtered_df = summary_df.copy()
 
-if start_date and end_date:
-    filtered_df = filtered_df[
-        (filtered_df["Date"].dt.date >= start_date) &
-        (filtered_df["Date"].dt.date <= end_date)
-    ]
+if date_range and len(date_range) == 2:
+    start, end = pd.to_datetime(date_range[0]), pd.to_datetime(date_range[1])
+    filtered_df = filtered_df[(filtered_df["Date"] >= start) & (filtered_df["Date"] <= end)]
 
 if campaign_filter:
     filtered_df = filtered_df[filtered_df["Camp_ID"].isin(campaign_filter)]
+
 if project_filter:
     filtered_df = filtered_df[filtered_df["Project Name"].isin(project_filter)]
 
-# --- Output Summary ---
-st.subheader("📋 Filtered Campaign Summary")
-st.dataframe(filtered_df, use_container_width=True)
+# --- Sheet Viewer Dropdown ---
+st.sidebar.markdown("---")
+sheet_to_view = st.sidebar.selectbox(
+    "👁 View Raw Sheet",
+    options=["None", "Daily report - Churn", "Node_def", "CTA_Def", "Base_Definitions", "Source_Def", "Audience_definition"],
+)
 
-# --- KPI Chart ---
-st.subheader("📈 KPIs")
-if not filtered_df.empty:
-    kpi_cols = ["Reply %", "Delivery %"] if "Reply %" in filtered_df.columns else ["Delivery %"]
-    st.bar_chart(filtered_df.set_index("Camp_ID")[kpi_cols])
+# --- Main View ---
+if sheet_to_view != "None":
+    st.subheader(f"📄 Raw Sheet: {sheet_to_view}")
+    df_map = {
+        "Daily report - Churn": churn_df,
+        "Node_def": node_def,
+        "CTA_Def": cta_def,
+        "Base_Definitions": base_def,
+        "Source_Def": source_def,
+        "Audience_definition": audience_def,
+    }
+    df_selected = df_map.get(sheet_to_view, pd.DataFrame())
+    if not df_selected.empty:
+        st.dataframe(df_selected, use_container_width=True)
+    else:
+        st.warning("⚠️ This sheet is empty or not found.")
 else:
-    st.info("No data matches the filters selected.")
+    st.subheader("📋 Filtered Campaign Summary")
+    st.dataframe(filtered_df, use_container_width=True)
 
-# --- Show Raw Sheet Based on Sidebar Selection ---
-if raw_sheet != "None":
-    st.subheader(f"🗂️ Raw Data: {raw_sheet}")
-    if raw_sheet == "Daily report - Churn":
-        st.dataframe(churn_df, use_container_width=True)
-    elif raw_sheet == "Node Def":
-        st.dataframe(node_def, use_container_width=True)
-    elif raw_sheet == "CTA Def":
-        st.dataframe(cta_def, use_container_width=True)
-    elif raw_sheet == "Base Def":
-        st.dataframe(base_def, use_container_width=True)
-    elif raw_sheet == "Source Def":
-        st.dataframe(source_def, use_container_width=True)
-    elif raw_sheet == "Audience Definition":
-        st.dataframe(audience_def, use_container_width=True)
+    st.subheader("📈 KPIs")
+    if not filtered_df.empty:
+        kpi_cols = ["Reply %", "Delivery %"] if "Reply %" in filtered_df.columns else ["Delivery %"]
+        st.bar_chart(filtered_df.set_index("Camp_ID")[kpi_cols])
+    else:
+        st.info("No data matches the filters selected.")

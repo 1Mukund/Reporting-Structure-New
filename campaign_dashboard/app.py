@@ -5,6 +5,7 @@ import streamlit as st
 import gspread
 import json
 import base64
+import re
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
@@ -20,7 +21,10 @@ def load_sheet(sheet_url):
     creds = ServiceAccountCredentials.from_json_keyfile_dict(key_dict, scope)
 
     client = gspread.authorize(creds)
-    sheet = client.open_by_url(sheet_url)
+
+    # Extract sheet ID manually and load safely
+    sheet_id = re.findall(r"/d/([a-zA-Z0-9-_]+)", sheet_url)[0]
+    sheet = client.open_by_key(sheet_id)
     return sheet
 
 # --- Fetch Data ---

@@ -1,60 +1,52 @@
 import streamlit as st
 import pandas as pd
 import gspread
-from google.oauth2.service_account import Credentials
+from oauth2client.service_account import ServiceAccountCredentials
+from urllib.parse import urlparse
 
-# Function to load the sheet using service account credentials
-@st.cache_data(show_spinner="Loading Google Sheet...")
-def load_sheet():
-    # Define required scopes
-    scope = [
-        "https://spreadsheets.google.com/feeds",
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
+# Get sheet URL from user or use default
+sheet_url = "https://docs.google.com/spreadsheets/d/1rl0AdLpgsYtzIfTWrdPmdiG1biQlstvXAqKP_qbPojY/edit"
 
-    # Load service account info from Streamlit secrets
-    creds = Credentials.from_service_account_info(
-        st.secrets["google_service_account"], scopes=scope
-    )
+@st.cache_resource
+def load_sheet(sheet_url):
+    # Extract sheet ID
+    sheet_id = sheet_url.split("/d/")[1].split("/")[0]
 
+    # Load credentials from secrets
+    creds_dict = st.secrets["google_service_account"]
+    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    
     client = gspread.authorize(creds)
-
-    # Use hardcoded Google Sheet URL
-    sheet_url = "https://docs.google.com/spreadsheets/d/1rl0AdLpgsYtzIfTWrdPmdiG1biQlstvXAqKP_qbPojY/edit?usp=sharing"
-    sheet = client.open_by_url(sheet_url)
-
+    sheet = client.open_by_key(sheet_id)
     return sheet
 
-# Load data from specific tabs
 def fetch_data():
-    sheet = load_sheet()
+    try:
+        sheet = load_sheet(sheet_url)
+        churn_df = pd.DataFrame(sheet.worksheet("churn").get_all_records())
+        cs_df = pd.DataFrame(sheet.worksheet("costsheet").get_all_records())
+        node_def = pd.DataFrame(sheet.worksheet("nodes_def").get_all_records())
+        cta_def = pd.DataFrame(sheet.worksheet("ctas_def").get_all_records())
+        return churn_df, cs_df, node_def, cta_def
+    except Exception as e:
+        st.error("❌ Failed to load data:")
+        st.exception(e)
+        return None, None, None, None
 
-    churn_df = pd.DataFrame(sheet.worksheet("Daily report - Churn").get_all_records())
-    cs_df    = pd.DataFrame(sheet.worksheet("CS").get_all_records())
-    node_def = pd.DataFrame(sheet.worksheet("Node_def").get_all_records())
-    cta_def  = pd.DataFrame(sheet.worksheet("CTA_Def").get_all_records())
+# Load data
+st.title("Campaign Dashboard")
+churn_df, cs_df, node_def, cta_def = fetch_data()
 
-    return churn_df, cs_df, node_def, cta_def
+if churn_df is not None:
+    st.subheader("Churn Data")
+    st.dataframe(churn_df)
 
-# Streamlit UI
-st.set_page_config(page_title="Automated Campaign Dashboard", layout="wide")
-st.title("📊 Automated Campaign Dashboard")
+    st.subheader("Cost Sheet Data")
+    st.dataframe(cs_df)
 
-try:
-    churn_df, cs_df, node_def, cta_def = fetch_data()
+    st.subheader("Node Definitions")
+    st.dataframe(node_def)
 
-    with st.expander("📌 Churn Report"):
-        st.dataframe(churn_df)
-
-    with st.expander("📄 Cost Sheet"):
-        st.dataframe(cs_df)
-
-    with st.expander("🔁 Node Definitions"):
-        st.dataframe(node_def)
-
-    with st.expander("✅ CTA Definitions"):
-        st.dataframe(cta_def)
-
-except Exception as e:
-    st.error(f"❌ Failed to load data: {e}")
+    st.subheader("CTA Definitions")
+    st.dataframe(cta_def)

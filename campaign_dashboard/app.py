@@ -158,7 +158,7 @@ if enable_sheet_view and sheet_to_view != "None":
         "Base_Definitions": base_def,
         "Source_Def": source_def,
         "Audience_definition": audience_def,
-        "CS": CS,
+        "CS": cs_df,
     }
     df_selected = df_map.get(sheet_to_view, pd.DataFrame())
     if not df_selected.empty:

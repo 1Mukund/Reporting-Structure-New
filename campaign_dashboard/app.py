@@ -145,7 +145,7 @@ sheet_to_view = "None"
 if enable_sheet_view:
     sheet_to_view = st.sidebar.selectbox(
         "Select Raw Sheet to View",
-        options=["None", "Daily report - Churn", "Node_def", "CTA_Def", "Base_Definitions", "Source_Def", "Audience_definition"],
+        options=["None", "Daily report - Churn", "Node_def", "CTA_Def", "Base_Definitions", "Source_Def", "Audience_definition", "CS"],
     )
 
 # --- Main View ---
@@ -158,6 +158,7 @@ if enable_sheet_view and sheet_to_view != "None":
         "Base_Definitions": base_def,
         "Source_Def": source_def,
         "Audience_definition": audience_def,
+        "CS": cs,
     }
     df_selected = df_map.get(sheet_to_view, pd.DataFrame())
     if not df_selected.empty:
